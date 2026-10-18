@@ -1,7 +1,10 @@
 #include "storage/library.h"
 #include <fstream>
 #include <sstream>
+#include <iomanip>
 #include <ctime>
+#include <cstring>
+#include <cerrno>
 #include <sys/stat.h>
 
 static bool ensure_dir(const std::string& d) {
