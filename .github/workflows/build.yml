@@ -64,7 +64,6 @@ jobs:
           APP_VERSION: ${{ steps.meta.outputs.version }}
         run: |
           make -j"$(nproc)" APP_VERSION="${APP_VERSION}"
-
       - name: Verify outputs
         id: verify
         shell: bash
@@ -74,16 +73,21 @@ jobs:
             test -f "$f" || { echo "::error::Missing $f"; exit 1; }
           done
 
-          # NRO header layout (libnx switch/nro.h):
-          #   0x00  u32  reserved / branch instruction
-          #   0x04  u32  "NRO0" magic  (LE bytes: 4E 52 4F 30 -> hex "4e524f30")
-          #   0x08  u32  version
-          #   0x0C  u32  size
-          MAGIC_HEX=$(od -An -tx1 -j4 -N4 local-pkmhome.nro | tr -d ' \n')
-          if [ "$MAGIC_HEX" != "4e524f30" ]; then
-            echo "::error::local-pkmhome.nro missing NRO0 magic at 0x04 (got: $MAGIC_HEX)"
-            echo "First 32 bytes of local-pkmhome.nro (hex):"
-            od -An -tx1 -N32 local-pkmhome.nro
+          # Two valid NRO header layouts exist:
+          #  Vanilla (Atmosphère non-homebrew): "NRO0" at 0x04
+          #  Homebrew (devkitPro elf2nro)     : "HOMEBREW" at 0x08 + "NRO0" at 0x10
+          HDR=$(od -An -tx1 -N32 local-pkmhome.nro | tr -d ' \n')
+          M_0x04="${HDR:8:8}"    # bytes 4-7
+          M_0x08="${HDR:16:16}"  # bytes 8-15  ("HOMEBREW")
+          M_0x10="${HDR:32:8}"   # bytes 16-19 ("NRO0")
+
+          if [ "$M_0x10" = "4e524f30" ] && [ "$M_0x08" = "484f4d4542524557" ]; then
+            echo "OK: homebrew NRO header (HOMEBREW at 0x08, NRO0 at 0x10)"
+          elif [ "$M_0x04" = "4e524f30" ]; then
+            echo "OK: vanilla NRO header (NRO0 at 0x04)"
+          else
+            echo "::error::local-pkmhome.nro is not a valid NRO"
+            echo "First 32 bytes: $HDR"
             exit 1
           fi
 
