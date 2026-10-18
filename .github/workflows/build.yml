@@ -73,11 +73,20 @@ jobs:
           for f in local-pkmhome.nro local-pkmhome.elf local-pkmhome.nacp; do
             test -f "$f" || { echo "::error::Missing $f"; exit 1; }
           done
-          MAGIC=$(head -c4 local-pkmhome.nro)
-          if [ "$MAGIC" != "NRO0" ]; then
-            echo "::error::local-pkmhome.nro missing NRO0 magic (got: $MAGIC)"
+
+          # NRO header layout (libnx switch/nro.h):
+          #   0x00  u32  reserved / branch instruction
+          #   0x04  u32  "NRO0" magic  (LE bytes: 4E 52 4F 30 -> hex "4e524f30")
+          #   0x08  u32  version
+          #   0x0C  u32  size
+          MAGIC_HEX=$(od -An -tx1 -j4 -N4 local-pkmhome.nro | tr -d ' \n')
+          if [ "$MAGIC_HEX" != "4e524f30" ]; then
+            echo "::error::local-pkmhome.nro missing NRO0 magic at 0x04 (got: $MAGIC_HEX)"
+            echo "First 32 bytes of local-pkmhome.nro (hex):"
+            od -An -tx1 -N32 local-pkmhome.nro
             exit 1
           fi
+
           sha256sum local-pkmhome.nro > local-pkmhome.nro.sha256
           SHA=$(awk '{print $1}' local-pkmhome.nro.sha256)
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
