@@ -18,7 +18,7 @@ APP_TITLE       := Local Pokemon Home
 APP_AUTHOR      := Lewis
 APP_VERSION     := 0.1.0
 
-ARCH     := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
+ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
 CFLAGS   := -g -Wall -O2 -ffunction-sections -fdata-sections \
             -D__SWITCH__ -DAPP_VERSION=\"$(APP_VERSION)\" \
