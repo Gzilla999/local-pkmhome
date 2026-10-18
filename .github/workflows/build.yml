@@ -1,0 +1,159 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Build with debug symbols only"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: devkitA64 / local-pkmhome.nro
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:latest
+      options: --user root
+
+    outputs:
+      nro-sha: ${{ steps.verify.outputs.sha256 }}
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.1.0-${GITHUB_SHA::7}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building version ${VERSION}"
+
+      - name: Install Switch SDL2 portlibs
+        run: |
+          dkp-pacman -S --noconfirm --needed \
+            switch-sdl2 switch-sdl2_image switch-sdl2_ttf
+
+      - name: Cache build directory
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: devkita64-build-${{ hashFiles('src/**/*.cpp', 'src/**/*.c', 'include/**/*.h', 'Makefile') }}
+          restore-keys: |
+            devkita64-build-
+
+      - name: Build NRO
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          make -j"$(nproc)" APP_VERSION="${APP_VERSION}"
+
+      - name: Verify outputs
+        id: verify
+        run: |
+          set -euo pipefail
+          for f in local-pkmhome.nro local-pkmhome.elf local-pkmhome.nacp; do
+            test -f "$f" || { echo "::error::Missing $f"; exit 1; }
+          done
+          # NRO magic check: devkitPro NRO starts with "NRO0"
+          MAGIC=$(head -c4 local-pkmhome.nro)
+          if [ "$MAGIC" != "NRO0" ]; then
+            echo "::error::local-pkmhome.nro missing NRO0 magic (got: $MAGIC)"
+            exit 1
+          fi
+          sha256sum local-pkmhome.nro > local-pkmhome.nro.sha256
+          SHA=$(awk '{print $1}' local-pkmhome.nro.sha256)
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          ls -la local-pkmhome.nro local-pkmhome.elf local-pkmhome.nacp
+          file local-pkmhome.nro || true
+
+      - name: Upload runnable artifact (NRO + hash + nacp)
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-pkmhome-${{ steps.meta.outputs.version }}
+          path: |
+            local-pkmhome.nro
+            local-pkmhome.nro.sha256
+            local-pkmhome.nacp
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 90
+
+      - name: Upload debug artifact (elf + map)
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-pkmhome-debug-${{ steps.meta.outputs.version }}
+          path: |
+            local-pkmhome.elf
+            *.map
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Job summary
+        run: |
+          {
+            echo "### local-pkmhome build"
+            echo ""
+            echo "- Version: \`${{ steps.meta.outputs.version }}\`"
+            echo "- SHA256: \`${{ steps.verify.outputs.sha256 }}\`"
+            echo "- Artifact: \`local-pkmhome-${{ steps.meta.outputs.version }}\`"
+            echo ""
+            echo "Download the artifact from the run summary, unzip, and copy"
+            echo "\`local-pkmhome.nro\` into Eden's homebrew folder."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Attach NRO to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: local-pkmhome-${{ needs.build.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: local-pkmhome ${{ needs.build.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+          files: |
+            local-pkmhome.nro
+            local-pkmhome.nro.sha256
+          body: |
+            **local-pkmhome ${{ needs.build.outputs.version }}**
+
+            Built from `${{ github.sha }}` by the devkitA64 CI container.
+
+            - `.nro` SHA256: `${{ needs.build.outputs.nro-sha }}`
+
+            ### Install in Eden
+            1. Extract `local-pkmhome.nro`.
+            2. Copy it into Eden's homebrew folder.
+            3. Launch from Eden's library.
+            4. First run creates `sdmc:/switch/local-pkmhome/`.
+            5. Place exported saves in `sdmc:/switch/local-pkmhome/imports/`.
+
+            **Status:** Phase 2 — Sword/Shield import is structural probe only.
+            Entity parsing, transfer, and save writing are not implemented.
