@@ -13,16 +13,15 @@
 namespace paths = pkmhome::paths;
 
 static void ensure_dir(const std::string& d) { mkdir(d.c_str(), 0777); }
-
 static std::vector<std::string> list_imports() {
     std::vector<std::string> out;
-    DIR* dir = opendir(kImportDir);
+    DIR* dir = opendir(paths::kImportDir);
     if (!dir) return out;
     while (dirent* e = readdir(dir)) {
         std::string n = e->d_name;
         if (n == "." || n == "..") continue;
-        // Accept extensionless "main" and common save extensions.
-        if (n == "main" || n.size() > 4) out.push_back(std::string(kImportDir) + "/" + n);
+        if (n == "main" || n.size() > 4)
+            out.push_back(std::string(paths::kImportDir) + "/" + n);
     }
     closedir(dir);
     return out;
@@ -42,16 +41,17 @@ int main(int argc, char** argv) {
     fsInitialize();
     fsdevMountSdmc();
 
-    ensure_dir(kRoot);
-    ensure_dir(kImportDir);
-    ensure_dir(kBackupDir);
+    ensure_dir(paths::kRoot);
+    ensure_dir(paths::kImportDir);
+    ensure_dir(paths::kBackupDir);
+    ensure_dir(paths::kLogDir);
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
     SDL_Window* win = SDL_CreateWindow("Local Pokemon Home", 0, 0, 1280, 720, 0);
     SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
     Library lib;
-    lib.load(kLibPath);
+    lib.load(paths::kLibPath);
 
     std::string status = "Press A to import from " + std::string(kImportDir);
     std::vector<std::string> files;
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
                         running = false;
                         break;
                     case SDLK_y:
-                        status = "Backup: " + lib.export_backup(kBackupDir);
+                        status = "Backup: " + lib.export_backup(paths::kBackupDir);
                         break;
                 }
             }
@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
         SDL_SetRenderDrawColor(ren, 18, 20, 26, 255);
         SDL_RenderClear(ren);
 
-        draw_text(ren, 40, 30, "POKEMON VAULT  v0.1.0");
+        draw_text(ren, 40, 30, "LOCAL PKMHOME  v0.1.0");
         draw_text(ren, 40, 60, "Local library: " + std::to_string(lib.saves().size()) + " saves");
         draw_text(ren, 40, 90, status);
 
