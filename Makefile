@@ -19,10 +19,11 @@ APP_AUTHOR      := Lewis
 APP_VERSION     := 0.1.0
 
 CFLAGS   := -g -Wall -O2 -ffunction-sections -fdata-sections \
-            -D__SWITCH__ -DAPP_VERSION=\"$(APP_VERSION)\"
+            -D__SWITCH__ -DAPP_VERSION=\"$(APP_VERSION)\" -fPIE
 CFLAGS   += $(INCLUDE)
 CXXFLAGS := $(CFLAGS) -std=c++17 -fno-exceptions -fno-rtti
-LDFLAGS  := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS  := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) \
+            -Wl,-Map,$(notdir $*.map)
 
 LIBS := -lSDL2 -lEGL -lGLESv2 -lglapi -ldrm_nouveau -lnx
 
