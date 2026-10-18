@@ -29,7 +29,7 @@ CXXFLAGS := $(CFLAGS) -std=c++17 -fno-exceptions -fno-rtti
 LDFLAGS  := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) \
             -Wl,-Map,$(notdir $*.map)
 
-LIBS := -lSDL2 -lEGL -lGLESv2 -lglapi -ldrm_nouveau -lnx
+LIBS := -lSDL2 -lEGL -lglapi -ldrm_nouveau -lnx
 
 LIBDIRS  := $(PORTLIBS) $(LIBNX)
 
