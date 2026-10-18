@@ -3,16 +3,18 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <ctime>
 #include <sys/stat.h>
 #include <dirent.h>
 
+#include "platform/paths.h"
 #include "storage/library.h"
 #include "saves/save_detector.h"
 
-#include "platform/paths.h"
 namespace paths = pkmhome::paths;
 
 static void ensure_dir(const std::string& d) { mkdir(d.c_str(), 0777); }
+
 static std::vector<std::string> list_imports() {
     std::vector<std::string> out;
     DIR* dir = opendir(paths::kImportDir);
@@ -28,8 +30,6 @@ static std::vector<std::string> list_imports() {
 }
 
 static void draw_text(SDL_Renderer* r, int x, int y, const std::string& s) {
-    // SDL2_ttf is not included in Phase 2 to reduce dependency risk.
-    // Draw a simple 5x7 block font for diagnostics until TTF is verified.
     for (size_t i = 0; i < s.size(); ++i) {
         SDL_Rect g{x + static_cast<int>(i) * 6, y, 4, 6};
         SDL_SetRenderDrawColor(r, 230, 230, 230, 255);
@@ -38,22 +38,24 @@ static void draw_text(SDL_Renderer* r, int x, int y, const std::string& s) {
 }
 
 int main(int argc, char** argv) {
+    (void)argc; (void)argv;
     fsInitialize();
     fsdevMountSdmc();
 
     ensure_dir(paths::kRoot);
     ensure_dir(paths::kImportDir);
     ensure_dir(paths::kBackupDir);
-    ensure_dir(paths::kLogDir);
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
-    SDL_Window* win = SDL_CreateWindow("Local Pokemon Home", 0, 0, 1280, 720, 0);
-    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    SDL_Window* win = SDL_CreateWindow("Local PkmHome", 0, 0, 1280, 720, 0);
+    SDL_Renderer* ren = SDL_CreateRenderer(
+        win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
     Library lib;
     lib.load(paths::kLibPath);
 
-    std::string status = "Press A to import from " + std::string(kImportDir);
+    std::string status =
+        std::string("Press A to import from ") + paths::kImportDir;
     std::vector<std::string> files;
     int selected = 0;
     bool running = true;
@@ -64,25 +66,34 @@ int main(int argc, char** argv) {
             if (ev.type == SDL_QUIT) running = false;
             if (ev.type == SDL_KEYDOWN) {
                 switch (ev.key.keysym.sym) {
-                    case SDLK_UP: if (selected > 0) --selected; break;
-                    case SDLK_DOWN: if (selected + 1 < (int)files.size()) ++selected; break;
+                    case SDLK_UP:
+                        if (selected > 0) --selected;
+                        break;
+                    case SDLK_DOWN:
+                        if (selected + 1 < static_cast<int>(files.size()))
+                            ++selected;
+                        break;
                     case SDLK_RETURN:
                     case SDLK_a: {
                         files = list_imports();
                         if (files.empty()) {
-                            status = "No files in imports/. Export a save from Eden and place it there.";
+                            status =
+                                "No files in imports/. Export a save from Eden "
+                                "and place it there.";
                         } else {
                             SaveDetectionResult d = detect_save(files[selected]);
                             status = d.game_name.empty()
                                 ? "Unsupported: " + d.diagnostic
-                                : d.game_name + " — " + d.diagnostic;
+                                : d.game_name + " - " + d.diagnostic;
                             if (d.structurally_valid) {
                                 ImportedSave s;
-                                s.save_id = "save-" + std::to_string(lib.saves().size() + 1);
+                                s.save_id = "lph-" +
+                                    std::to_string(lib.saves().size() + 1);
                                 s.path = files[selected];
                                 s.game_name = d.game_name;
                                 s.file_size = d.file_size;
-                                s.imported_at_unix = static_cast<uint64_t>(time(nullptr));
+                                s.imported_at_unix =
+                                    static_cast<uint64_t>(time(nullptr));
                                 s.read_only = true;
                                 lib.saves().push_back(s);
                                 lib.save();
@@ -97,6 +108,8 @@ int main(int argc, char** argv) {
                     case SDLK_y:
                         status = "Backup: " + lib.export_backup(paths::kBackupDir);
                         break;
+                    default:
+                        break;
                 }
             }
         }
@@ -105,17 +118,21 @@ int main(int argc, char** argv) {
         SDL_RenderClear(ren);
 
         draw_text(ren, 40, 30, "LOCAL PKMHOME  v0.1.0");
-        draw_text(ren, 40, 60, "Local library: " + std::to_string(lib.saves().size()) + " saves");
+        draw_text(ren, 40, 60,
+                  "Local library: " + std::to_string(lib.saves().size()) +
+                  " saves");
         draw_text(ren, 40, 90, status);
 
         int y = 140;
         for (size_t i = 0; i < files.size() && i < 12; ++i) {
-            std::string label = (static_cast<int>(i) == selected ? "> " : "  ") + files[i];
+            std::string label =
+                (static_cast<int>(i) == selected ? "> " : "  ") + files[i];
             draw_text(ren, 40, y, label);
             y += 20;
         }
 
-        draw_text(ren, 40, 660, "A: import selected   Y: backup library   B: exit");
+        draw_text(ren, 40, 660,
+                  "A: import selected   Y: backup library   B: exit");
         SDL_RenderPresent(ren);
     }
 
