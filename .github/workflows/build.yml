@@ -67,12 +67,12 @@ jobs:
 
       - name: Verify outputs
         id: verify
+        shell: bash
         run: |
           set -euo pipefail
           for f in local-pkmhome.nro local-pkmhome.elf local-pkmhome.nacp; do
             test -f "$f" || { echo "::error::Missing $f"; exit 1; }
           done
-          # NRO magic check: devkitPro NRO starts with "NRO0"
           MAGIC=$(head -c4 local-pkmhome.nro)
           if [ "$MAGIC" != "NRO0" ]; then
             echo "::error::local-pkmhome.nro missing NRO0 magic (got: $MAGIC)"
